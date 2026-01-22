@@ -1,0 +1,189 @@
+###############################################################################
+# Custom Kettle Card — Keep-Warm Protocol (30 min cap)
+# File: /config/packages/kettle_protocol.yaml
+#
+# Requires these existing kettle entities:
+#   sensor.kettle_current_temperature
+#   sensor.kettle_status                 (heating / standby / Warm)
+#   switch.kettle_start
+#   switch.kettle_heat_preservation
+#
+# Provides:
+#   input_boolean.kettle_keep_warm_protocol
+#   timer.kettle_keep_warm_max
+#   sensor.kettle_status_live
+#   sensor.kettle_keep_warm_remaining
+#   binary_sensor.kettle_keep_warm_protocol_active
+###############################################################################
+
+homeassistant:
+  # package
+
+input_boolean:
+  kettle_keep_warm_protocol:
+    name: Kettle Keep-Warm Protocol
+    icon: mdi:timer-sand
+    initial: false
+
+timer:
+  kettle_keep_warm_max:
+    name: Kettle Keep-Warm Max
+    duration: "00:30:00"
+
+template:
+  - binary_sensor:
+      - name: Kettle Keep-Warm Protocol Active
+        unique_id: kettle_keep_warm_protocol_active
+        icon: mdi:timer-sand
+        state: >
+          {{ is_state('input_boolean.kettle_keep_warm_protocol','on') }}
+
+  - sensor:
+      # Live status with countdown while Warm + protocol active
+      - name: Kettle Status (Live)
+        unique_id: kettle_status_live
+        state: >
+          {% set s = states('sensor.kettle_status') %}
+          {% set s_l = s|lower %}
+          {% set rem = state_attr('timer.kettle_keep_warm_max','remaining') %}
+          {% set proto = is_state('input_boolean.kettle_keep_warm_protocol','on') %}
+
+          {# Format remaining as mm:ss if possible #}
+          {% set mmss = '—' %}
+          {% if rem %}
+            {% set parts = rem.split(':') %}
+            {% if parts|length == 3 %}
+              {% set mmss = parts[1] ~ ':' ~ parts[2] %}
+            {% endif %}
+          {% endif %}
+
+          {% if s == 'Warm' and proto and rem %}
+            Warm ({{ mmss }})
+          {% elif s == 'Warm' %}
+            Warm
+          {% elif s_l == 'heating' %}
+            Heating
+          {% elif s_l == 'standby' %}
+            Standby
+          {% else %}
+            {{ s }}
+          {% endif %}
+
+      - name: Kettle Keep-Warm Remaining
+        unique_id: kettle_keep_warm_remaining
+        icon: >
+          {% if is_state('input_boolean.kettle_keep_warm_protocol','on') %}
+            mdi:timer-sand
+          {% else %}
+            mdi:timer-outline
+          {% endif %}
+        state: >
+          {% set rem = state_attr('timer.kettle_keep_warm_max','remaining') %}
+          {% if is_state('input_boolean.kettle_keep_warm_protocol','on') and rem %}
+            {% set parts = rem.split(':') %}
+            {% if parts|length == 3 %}
+              {{ parts[1] ~ ':' ~ parts[2] }}
+            {% else %}
+              —
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+
+automation:
+  ###########################################################################
+  # 1) Keep Warm ON -> start 30 min cap + flag
+  ###########################################################################
+  - id: kettle_keep_warm_protocol_start
+    alias: "Kettle — Keep Warm protocol start (30 min cap)"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: switch.kettle_heat_preservation
+        to: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.kettle_keep_warm_protocol
+      - service: timer.start
+        target:
+          entity_id: timer.kettle_keep_warm_max
+        data:
+          duration: "00:30:00"
+
+  ###########################################################################
+  # 2) Keep Warm OFF manually -> cancel protocol + timer
+  ###########################################################################
+  - id: kettle_keep_warm_protocol_manual_stop
+    alias: "Kettle — Keep Warm protocol stop (manual)"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: switch.kettle_heat_preservation
+        to: "off"
+    action:
+      - service: timer.cancel
+        target:
+          entity_id: timer.kettle_keep_warm_max
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.kettle_keep_warm_protocol
+
+  ###########################################################################
+  # 3) Max time reached -> force Keep Warm OFF + clear
+  ###########################################################################
+  - id: kettle_keep_warm_protocol_timeout
+    alias: "Kettle — Keep Warm protocol timeout (force off)"
+    mode: single
+    trigger:
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.kettle_keep_warm_max
+    condition:
+      - condition: state
+        entity_id: input_boolean.kettle_keep_warm_protocol
+        state: "on"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.kettle_heat_preservation
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.kettle_keep_warm_protocol
+      - service: persistent_notification.create
+        data:
+          title: "Kettle"
+          message: "Keep Warm max time reached (30 min). Keep Warm turned OFF."
+
+  ###########################################################################
+  # 4) If kettle goes standby during keep-warm -> abort immediately (lifted)
+  ###########################################################################
+  - id: kettle_keep_warm_abort_on_standby
+    alias: "Kettle — Abort Keep Warm if kettle goes standby (lifted)"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: sensor.kettle_status
+        to: "standby"
+    condition:
+      - condition: state
+        entity_id: input_boolean.kettle_keep_warm_protocol
+        state: "on"
+      - condition: state
+        entity_id: switch.kettle_heat_preservation
+        state: "on"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.kettle_heat_preservation
+      - service: timer.cancel
+        target:
+          entity_id: timer.kettle_keep_warm_max
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.kettle_keep_warm_protocol
+      - service: persistent_notification.create
+        data:
+          title: "Kettle"
+          message: "Kettle went standby (lifted). Keep Warm aborted and turned OFF."
