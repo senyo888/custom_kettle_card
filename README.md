@@ -97,6 +97,11 @@ Configure:
 
 ---
 
+<img width="606" height="751" alt="Screenshot 2026-01-22 at 15 36 12" src="https://github.com/user-attachments/assets/3d70b790-3504-46ec-8adb-c309d59a4270" />
+
+---
+
+
 ## Automation options (required for safety logic)
 
 You must choose **one** of the following.
