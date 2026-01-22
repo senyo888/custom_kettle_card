@@ -1,0 +1,172 @@
+blueprint:
+  name: Kettle — Keep-Warm Protocol (Cap + Abort)
+  description: >
+    Enforces a maximum keep-warm duration and aborts keep-warm if the kettle
+    reports a lift/idle status (e.g. standby). Designed to work with a timer +
+    input_boolean so UI can show a live countdown.
+  domain: automation
+  input:
+    keep_warm_switch:
+      name: Keep-warm switch
+      description: The switch that enables keep-warm.
+      selector:
+        entity:
+          domain: switch
+
+    kettle_status_sensor:
+      name: Kettle status sensor
+      description: Sensor reporting kettle state (e.g. heating / Warm / standby).
+      selector:
+        entity:
+          domain: sensor
+
+    protocol_flag:
+      name: Protocol flag (input_boolean)
+      description: Helper that indicates the protocol is active.
+      selector:
+        entity:
+          domain: input_boolean
+
+    protocol_timer:
+      name: Protocol timer (timer)
+      description: Helper timer used for the maximum keep-warm cap.
+      selector:
+        entity:
+          domain: timer
+
+    max_duration:
+      name: Max keep-warm duration
+      description: The maximum time keep-warm is allowed to run.
+      default: "00:30:00"
+      selector:
+        duration: {}
+
+    abort_status:
+      name: Abort status
+      description: Status value that should immediately abort keep-warm (e.g. standby).
+      default: standby
+      selector:
+        text: {}
+
+    notify_on_timeout:
+      name: Notify when timeout forces keep-warm OFF
+      default: true
+      selector:
+        boolean: {}
+
+    notify_on_abort:
+      name: Notify when abort forces keep-warm OFF
+      default: true
+      selector:
+        boolean: {}
+
+mode: restart
+
+trigger:
+  # Keep-warm turned ON
+  - id: keepwarm_on
+    platform: state
+    entity_id: !input keep_warm_switch
+    to: "on"
+
+  # Keep-warm turned OFF manually
+  - id: keepwarm_off
+    platform: state
+    entity_id: !input keep_warm_switch
+    to: "off"
+
+  # Timer finished (cap reached)
+  - id: timer_finished
+    platform: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input protocol_timer
+
+  # Kettle goes to abort status (lifted/idle)
+  - id: abort_status
+    platform: state
+    entity_id: !input kettle_status_sensor
+    to: !input abort_status
+
+action:
+  - choose:
+
+      # 1) Keep-warm ON -> start cap + set protocol active
+      - conditions:
+          - condition: trigger
+            id: keepwarm_on
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input protocol_flag
+          - service: timer.start
+            target:
+              entity_id: !input protocol_timer
+            data:
+              duration: !input max_duration
+
+      # 2) Keep-warm OFF manually -> cancel timer + clear protocol
+      - conditions:
+          - condition: trigger
+            id: keepwarm_off
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input protocol_timer
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input protocol_flag
+
+      # 3) Timeout -> force keep-warm OFF + clear protocol (+optional notify)
+      - conditions:
+          - condition: trigger
+            id: timer_finished
+          - condition: state
+            entity_id: !input protocol_flag
+            state: "on"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input keep_warm_switch
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input protocol_flag
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: !input notify_on_timeout
+                sequence:
+                  - service: persistent_notification.create
+                    data:
+                      title: "Kettle"
+                      message: "Keep Warm max time reached. Keep Warm turned OFF."
+
+      # 4) Abort status -> force keep-warm OFF + clear protocol (+optional notify)
+      - conditions:
+          - condition: trigger
+            id: abort_status
+          - condition: state
+            entity_id: !input protocol_flag
+            state: "on"
+          - condition: state
+            entity_id: !input keep_warm_switch
+            state: "on"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input keep_warm_switch
+          - service: timer.cancel
+            target:
+              entity_id: !input protocol_timer
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input protocol_flag
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: !input notify_on_abort
+                sequence:
+                  - service: persistent_notification.create
+                    data:
+                      title: "Kettle"
+                      message: "Kettle went idle/standby. Keep Warm aborted and turned OFF."
