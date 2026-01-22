@@ -2,6 +2,8 @@
 
 A tiny Home Assistant custom integration that enforces a **maximum keep‑warm duration** (default **30 minutes**) for a smart kettle and exposes **live countdown sensors** for UI cards.
 
+![IMG_5412](https://github.com/user-attachments/assets/fd0f1929-50a7-4f2e-b6dc-d2817a9d0abc)
+
 ## What it does
 
 - Starts a protocol timer when keep‑warm is switched **ON**
@@ -12,7 +14,7 @@ A tiny Home Assistant custom integration that enforces a **maximum keep‑warm d
 
 ## Requirements
 
-- Home Assistant 2023.10+
+- Home Assistant 2024.+
 - Your kettle must provide:
   - a keep‑warm switch entity
   - a status sensor entity
@@ -51,4 +53,12 @@ This repository includes a Lovelace button‑card example under `examples/lovela
 
 ## Safety note
 
-This integration is intended to prevent indefinite keep‑warm behavior. Always follow the manufacturer’s safety guidance.
+This integration is intended to prevent indefinite 
+
+
+keep‑warm behavior. Always follow the manufacturer’s safety guidance.
+
+
+https://github.com/user-attachments/assets/03df6251-09dc-46a5-8a4c-269fc7c1ba96
+
+
