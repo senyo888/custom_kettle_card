@@ -1,0 +1,151 @@
+# Lovelace button‑card example for the Custom Kettle Card integration
+type: custom:button-card
+entity: switch.kettle_start
+name: Kettle
+icon: mdi:kettle-steam
+show_state: false
+
+tap_action:
+  action: toggle
+hold_action:
+  action: more-info
+double_tap_action:
+  action: more-info
+
+variables:
+  cv_red_glow: 0 0 10px rgba(239,68,68,0.55)
+  cv_red_line: rgba(239,68,68,0.9)
+
+styles:
+  grid:
+    - grid-template-areas: '"i n kw" "i s kw"'
+    - grid-template-columns: 30px 1fr auto
+    - grid-template-rows: min-content min-content
+    - column-gap: 10px
+    - row-gap: 2px
+    - align-items: center
+
+  card:
+    - border-radius: 18px
+    - padding: 10px 12px
+    - background: rgba(10,12,16,0.62)
+    - overflow: hidden
+    - border: |
+        [[[
+          const w = states['input_number.cv_outline_width']?.state ?? 2;
+          const o = states['input_number.cv_outline_opacity']?.state ?? 0.22;
+          return `${w}px solid rgba(255,255,255,${o})`;
+        ]]]
+    - box-shadow: |
+        [[[
+          return variables.cv_red_glow;
+        ]]]
+
+  icon:
+    - width: 26px
+    - color: |
+        [[[
+          const on = entity?.state === 'on';
+          const warm = states['switch.kettle_heat_preservation']?.state === 'on';
+          return (on || warm) ? 'rgba(239,68,68,1)' : 'rgba(148,163,184,0.85)';
+        ]]]
+    - animation: |
+        [[[
+          const on = entity?.state === 'on';
+          const warm = states['switch.kettle_heat_preservation']?.state === 'on';
+          return (on || warm) ? 'kettle-steam 1.35s ease-in-out infinite' : 'none';
+        ]]]
+
+  name:
+    - justify-self: start
+    - font-weight: 700
+
+  custom_fields:
+    s:
+      - justify-self: start
+      - font-size: 12px
+      - opacity: 0.9
+    kw:
+      - justify-self: end
+
+extra_styles: |
+  @keyframes kettle-steam {
+    0% { opacity: 0.78; transform: translateY(0px);
+      filter: drop-shadow(0 0 2px rgba(239,68,68,0.10)) drop-shadow(0 0 8px rgba(239,68,68,0.20)); }
+    50% { opacity: 1; transform: translateY(-1.2px);
+      filter: drop-shadow(0 0 3px rgba(239,68,68,0.30)) drop-shadow(0 0 14px rgba(239,68,68,0.70)); }
+    100% { opacity: 0.78; transform: translateY(0px);
+      filter: drop-shadow(0 0 2px rgba(239,68,68,0.10)) drop-shadow(0 0 8px rgba(239,68,68,0.20)); }
+  }
+
+  #card { position: relative; }
+
+  #card:before {
+    content:"";
+    position:absolute;
+    left:0;
+    top:10px;
+    bottom:10px;
+    width:4px;
+    border-radius:999px;
+    background: [[[
+      return variables.cv_red_line;
+    ]]];
+    box-shadow: [[[
+      return variables.cv_red_glow;
+    ]]];
+    opacity:0.95;
+  }
+
+custom_fields:
+  s: |
+    [[[
+      const temp = states['sensor.kettle_current_temperature']?.state;
+      const uom  = states['sensor.kettle_current_temperature']?.attributes?.unit_of_measurement || '°C';
+
+      const live = states['sensor.kettle_status_live']?.state
+        ?? states['sensor.kettle_status']?.state
+        ?? 'idle';
+
+      const nice = String(live).replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+
+      const tempTxt = (temp && !['unknown','unavailable'].includes(temp))
+        ? `${temp}${uom}`
+        : '—';
+
+      return `${tempTxt} <span style="opacity:.55;">•</span> ${nice}`;
+    ]]]
+
+  kw: |
+    [[[
+      const warmOn = states['switch.kettle_heat_preservation']?.state === 'on';
+
+      const label = warmOn ? 'KEEP WARM' : 'KEEP WARM';
+      const bg    = warmOn ? 'rgba(239,68,68,0.22)' : 'rgba(255,255,255,0.06)';
+      const bd    = warmOn ? 'rgba(239,68,68,0.75)' : 'rgba(255,255,255,0.14)';
+      const sh    = warmOn ? '0 0 16px rgba(239,68,68,0.75)' : 'none';
+      const col   = warmOn ? 'rgba(239,68,68,1)' : 'rgba(148,163,184,0.85)';
+
+      return `
+        <div
+          style="
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-width:130px;
+            padding:8px 14px;
+            border-radius:999px;
+            background:${bg};
+            border:1px solid ${bd};
+            box-shadow:${sh};
+            cursor:pointer;
+            user-select:none;
+          "
+          onclick="event.stopPropagation(); hass.callService('homeassistant','toggle',{entity_id:'switch.kettle_heat_preservation'})"
+        >
+          <span style="font-size:12px;font-weight:800;letter-spacing:.3px;color:${col};">
+            ${label}
+          </span>
+        </div>
+      `;
+    ]]]

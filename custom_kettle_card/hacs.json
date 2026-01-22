@@ -1,0 +1,6 @@
+{
+  "name": "Custom Kettle Card (Kettle Protocol)",
+  "content_in_root": false,
+  "domains": ["kettle_protocol"],
+  "homeassistant": "2023.10.0"
+}
